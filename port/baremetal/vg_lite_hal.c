@@ -84,11 +84,30 @@ static uint32_t         s_pool_size;
 #define VGL_ALIGN            64u
 #define VGL_ALIGN_UP(x)      (((x) + (VGL_ALIGN - 1u)) & ~(VGL_ALIGN - 1u))
 
+/* ★ THE HEADER IS PADDED TO THE ALIGNMENT ON PURPOSE.
+ *
+ * The payload starts immediately after the header, so if the header were its
+ * natural 12 bytes every payload would land 12 bytes past a 64-byte boundary.
+ * Vivante requires 64-byte-aligned command buffers; a misaligned one does NOT
+ * fail cleanly -- the GPU starts executing and HANGS IN THE FRONT END.
+ *
+ * Measured on silicon before the fix: allocations came back at ...0x470
+ * (0x470 % 64 == 48), and after a submit AQHiIdle (0x004) read 0x7FFFFFFE --
+ * bit 0, the Front End, BUSY forever -- with no completion interrupt and no
+ * pixels. Every driver call still returned SUCCESS.
+ *
+ * Padding the header to VGL_ALIGN keeps both the header and the payload
+ * 64-byte aligned, given a 64-byte-aligned pool base and sizes rounded up to
+ * VGL_ALIGN. */
 typedef struct vgl_node {
     struct vgl_node *next;
     uint32_t         size;   /* payload bytes, excluding this header */
     uint32_t         used;
+    uint8_t          _pad[VGL_ALIGN - (sizeof(void *) + 2u * sizeof(uint32_t))];
 } vgl_node_t;
+
+_Static_assert(sizeof(vgl_node_t) == VGL_ALIGN,
+               "node header must be exactly VGL_ALIGN so payloads stay aligned");
 
 static vgl_node_t *s_head;
 
