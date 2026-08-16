@@ -119,7 +119,7 @@ void vg_lite_hal_barrier(void)
     __asm volatile ("dsb" ::: "memory");
 }
 
-vg_lite_error_t vg_lite_hal_initialize(void)
+static void gpu2d_clocks_on(void)
 {
     /* Route GPU2D_CLK_ROOT to SYS_PLL3 (480 MHz) before ungating, so the GPU
      * never sees a running clock it was not configured for. */
@@ -128,6 +128,33 @@ vg_lite_error_t vg_lite_hal_initialize(void)
      * explicitly rather than depending on it by accident. */
     VGL_CCM_LPCG128_DIRECT = 1u;
     vg_lite_hal_barrier();
+}
+
+/* ★ Is the GC355 actually there?
+ *
+ * This exists because vg_lite_init() assumes the hardware exists: on a part
+ * with no GPU it does not fail cleanly, it SPINS -- measured on QEMU, whose
+ * mimxrt1170-evk machine has no GC355 model, where the probe printed PANEL_OK
+ * and then went silent with no fault logged.
+ *
+ * So callers must ask first. Clocks are enabled here because a gated
+ * peripheral reads back as zero, which would make a present GPU look absent.
+ * Returns the chip ID, or 0 when nothing answers. 0xFFFFFFFF (floating bus)
+ * is also reported as absent.
+ *
+ * This is what makes one binary serve both paths: accelerated on silicon,
+ * software-rendered in QEMU, deterministically and without hanging. */
+uint32_t vg_lite_hal_probe_chip_id(void)
+{
+    gpu2d_clocks_on();
+
+    const uint32_t id = vg_lite_hal_peek(VG_LITE_HW_CHIP_ID);
+    return (id == 0xFFFFFFFFu) ? 0u : id;
+}
+
+vg_lite_error_t vg_lite_hal_initialize(void)
+{
+    gpu2d_clocks_on();
 
     attachInterruptVector((IRQ_NUMBER_t)VGLITE_RT1176_GPU2D_IRQ, vg_lite_IRQHandler);
     NVIC_ENABLE_IRQ(VGLITE_RT1176_GPU2D_IRQ);
