@@ -223,17 +223,36 @@ void vg_lite_hal_free_os_heap(void)
     pool_reset();
 }
 
+/* Register externally-owned memory (e.g. a panel framebuffer the application
+ * allocated) for GPU access.
+ *
+ * ★ THE RETURN VALUE IS A SUCCESS FLAG, NOT AN OPTIONAL HANDLE. The kernel's
+ * do_map() (VGLiteKernel/vg_lite_kernel.c:879-887) fails the whole call with
+ * VG_LITE_OUT_OF_RESOURCES when this returns NULL. An earlier revision here
+ * returned NULL "because there is no MMU and nothing needs recording", which
+ * made every vg_lite_map() fail -- and then, because nothing else checks it,
+ * vg_lite_draw() and vg_lite_finish() still both reported SUCCESS while the
+ * GPU wrote NOT ONE PIXEL. Measured on silicon: the framebuffer checksum came
+ * back as exactly the all-zeros FNV.
+ *
+ * Translation is genuinely identity (no MMU in this path), so the handle only
+ * has to be a distinct non-NULL token that unmap can accept. The logical
+ * address serves: it is unique per mapping and needs no bookkeeping. */
 void *vg_lite_hal_map(unsigned long size, void *logical, uint32_t physical, uint32_t *gpu)
 {
     (void)size;
-    (void)logical;
-    /* Identity: no MMU in this path, so the GPU address is the physical one. */
-    if (gpu) *gpu = physical;
-    return NULL;
+
+    if (gpu) {
+        *gpu = physical + s_gpu_mem_base;
+    }
+    /* Non-NULL required. Fall back to the physical address when the caller
+     * supplied only that, so a mapping is never reported as a failure. */
+    return (logical != NULL) ? logical : (void *)(uintptr_t)physical;
 }
 
 void vg_lite_hal_unmap(void *memory_handle)
 {
+    /* Nothing was allocated to describe the mapping, so nothing to release. */
     (void)memory_handle;
 }
 
