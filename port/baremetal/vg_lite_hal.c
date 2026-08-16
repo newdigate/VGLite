@@ -137,6 +137,43 @@ void vg_lite_hal_barrier(void)
     __asm volatile ("dsb" ::: "memory");
 }
 
+/* --- Display-mix reset (SRC display slice) -------------------------------
+ * The GC355 sits in the display mix reset domain. EVERY NXP MCUXpresso VGLite
+ * example for this board does this before touching the GPU
+ * (`BOARD_ResetDisplayMix()` in SimplePath.c, Glyphs.c, RadialGradient.c,
+ * Font.c ...), with the comment: "Reset the displaymix, otherwise during
+ * debugging, the debugger may not reset the display, then the behavior is not
+ * right."
+ *
+ * ★ That is exactly this tree's situation -- images are loaded and started by
+ * LinkServer, i.e. under a debugger, on every run. Without this the GPU's AHB
+ * slave answers (the chip ID reads back 0x355) and vg_lite_init()'s command
+ * buffers complete, but no later submit ever finishes and NOT ONE PIXEL is
+ * written -- measured.
+ *
+ * Registers (RM ch.25): SRC base 0x40C04000; CTRL_DISPLAY at offset 0x224,
+ * whose bit 0 SW_RESET is SELF-CLEARING ("once it is set to 1, the reset
+ * process will begin, and once it finishes, this bit will be self cleared",
+ * RM:121938-121947); STAT_DISPLAY at 0x230, whose read-only bit 0 indicates a
+ * reset is in process (RM:122266). */
+#define VGL_SRC_CTRL_DISPLAY        (*(volatile uint32_t *)0x40C04224u)
+#define VGL_SRC_STAT_DISPLAY        (*(volatile uint32_t *)0x40C04230u)
+#define VGL_SRC_SW_RESET            (1u << 0)
+#define VGL_SRC_UNDER_RST           (1u << 0)
+
+static void display_mix_reset(void)
+{
+    VGL_SRC_CTRL_DISPLAY = VGL_SRC_SW_RESET;
+    /* Bounded: a reset that never completes must not hang the board, for the
+     * same reason every wait in this port is bounded. */
+    for (uint32_t spins = 0; spins < 1000000u; spins++) {
+        if ((VGL_SRC_STAT_DISPLAY & VGL_SRC_UNDER_RST) == 0u) {
+            break;
+        }
+    }
+    vg_lite_hal_barrier();
+}
+
 static void gpu2d_clocks_on(void)
 {
     /* Route GPU2D_CLK_ROOT to SYS_PLL3 (480 MHz) before ungating, so the GPU
@@ -164,6 +201,7 @@ static void gpu2d_clocks_on(void)
  * software-rendered in QEMU, deterministically and without hanging. */
 uint32_t vg_lite_hal_probe_chip_id(void)
 {
+    display_mix_reset();
     gpu2d_clocks_on();
 
     const uint32_t id = vg_lite_hal_peek(VG_LITE_HW_CHIP_ID);
@@ -172,6 +210,9 @@ uint32_t vg_lite_hal_probe_chip_id(void)
 
 vg_lite_error_t vg_lite_hal_initialize(void)
 {
+    /* Order matters and matches the SDK's board init: release the display mix
+     * from reset, THEN clock the GPU. */
+    display_mix_reset();
     gpu2d_clocks_on();
 
     attachInterruptVector((IRQ_NUMBER_t)VGLITE_RT1176_GPU2D_IRQ, vg_lite_IRQHandler);
