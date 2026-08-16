@@ -56,6 +56,21 @@ uint32_t vg_lite_os_wait_timeouts(void)
     return s_wait_timeouts;
 }
 
+/* ★ How many times the GPU2D ISR actually ran.
+ *
+ * Load-bearing diagnostic, not decoration. A wait that returns "success" is
+ * ambiguous on its own: it can mean the GPU signalled, or it can mean the wait
+ * consumed a STALE flag left by an earlier operation and returned without the
+ * GPU having done anything. Those two are indistinguishable from the outside
+ * and produce very different pixels. Comparing this count against the number
+ * of submits tells them apart. */
+static volatile uint32_t s_irq_count;
+
+uint32_t vg_lite_os_irq_count(void)
+{
+    return s_irq_count;
+}
+
 void *vg_lite_os_malloc(uint32_t size)
 {
     return malloc(size);
@@ -92,6 +107,7 @@ void vg_lite_os_IRQHandler(void)
 {
     const uint32_t flags = vg_lite_hal_peek(VG_LITE_INTR_STATUS);
 
+    s_irq_count++;
     if (flags) {
         s_int_flags |= flags;
     }

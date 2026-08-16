@@ -67,6 +67,11 @@ uint32_t vg_lite_os_wait_timeouts(void);
  * under QEMU -- which is what the gate asserts. */
 uint32_t vg_lite_hal_probe_chip_id(void);
 
+/* How many times the GPU2D ISR ran. Compare against the number of submits: a
+ * wait that "succeeded" without the count advancing consumed a STALE flag and
+ * the GPU did nothing. */
+uint32_t vg_lite_os_irq_count(void);
+
 #ifdef __cplusplus
 }
 #endif

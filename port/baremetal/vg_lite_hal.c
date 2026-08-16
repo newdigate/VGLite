@@ -44,6 +44,24 @@
 #define VGL_ROOT_MUX(x)             (((uint32_t)(x) << 8) & 0x700u)
 #define VGL_ROOT_DIV(x)             (((uint32_t)(x) << 0) & 0x0FFu)
 #define VGL_GPU2D_MUX_SYS_PLL3      6u
+#define VGL_GPU2D_MUX_OSC_24M       1u
+
+/* Clock source. SYS_PLL3 at 480 MHz (mux 6, DIV 0) is inside CLOCK_ROOT68's
+ * 500 MHz table maximum and needs no PLL bring-up (PLL3 is locked at boot).
+ *
+ * ★ MEASURED, so nobody repeats it: clock rate is NOT the cause of the
+ * open no-pixels defect below. Running this root at OSC_24M (mux 1) instead --
+ * unambiguously in spec, 20x slower -- behaves IDENTICALLY: vg_lite_init()
+ * still succeeds and its command buffers still complete, and every submit
+ * after it still times out with no completion interrupt. The only difference
+ * was more interrupts during init (5 vs 2). Override at build time if you want
+ * to re-test the axis. */
+#ifndef VGLITE_GPU2D_MUX
+#define VGLITE_GPU2D_MUX            VGL_GPU2D_MUX_SYS_PLL3
+#endif
+#ifndef VGLITE_GPU2D_DIV
+#define VGLITE_GPU2D_DIV            0u
+#endif
 
 /* --- State set by vg_lite_init_mem() ------------------------------------
  * Upstream's contract is a pure setter storing four statics that every other
@@ -123,7 +141,7 @@ static void gpu2d_clocks_on(void)
 {
     /* Route GPU2D_CLK_ROOT to SYS_PLL3 (480 MHz) before ungating, so the GPU
      * never sees a running clock it was not configured for. */
-    VGL_CCM_CLOCK_ROOT68_CTRL = VGL_ROOT_MUX(VGL_GPU2D_MUX_SYS_PLL3) | VGL_ROOT_DIV(0);
+    VGL_CCM_CLOCK_ROOT68_CTRL = VGL_ROOT_MUX(VGLITE_GPU2D_MUX) | VGL_ROOT_DIV(VGLITE_GPU2D_DIV);
     /* Ungate all three GPU2D clocks. Reset value is already 1, but state this
      * explicitly rather than depending on it by accident. */
     VGL_CCM_LPCG128_DIRECT = 1u;
