@@ -44,6 +44,15 @@ grep -rl "FreeRTOS\|xSemaphore\|vTaskDelay\|pdTRUE" VGLite VGLiteKernel inc | wc
   (`vg_lite_os.c`, 27 FreeRTOS references; `vg_lite_hal.c`, 3). This tree is
   bare-metal (`LV_USE_OS 0`), so `port/baremetal/` replaces them. These are the
   ONLY files this repo reimplements.
+
+  ★ **One header from `rtos/` IS vendored, unmodified:
+  `port/baremetal/vg_lite_os.h`.** It is not FreeRTOS-specific (zero FreeRTOS
+  references) — it is the API contract the port implements, and the vendored
+  headers include it directly (`VGLiteKernel/vg_lite_kernel.h:30`,
+  `inc/vg_lite_hal.h:34`). Deleting `rtos/` wholesale breaks those includes;
+  this was caught before the first build. It carries no per-file licence
+  notice, like several upstream headers, and is covered by the repo `LICENSE`
+  (MIT); it contains no copyleft text.
 - **`font/`** (mcufont) — VGLite's own text rasteriser. LVGL renders glyphs as
   paths through its own font engine (`lv_draw_vg_lite_label.c`), so it is dead
   weight here. Note `inc/vg_lite_text.h` was kept for completeness but has no
