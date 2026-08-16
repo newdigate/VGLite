@@ -156,7 +156,7 @@ void vg_lite_hal_barrier(void)
     __asm volatile ("dsb" ::: "memory");
 }
 
-/* --- Display-mix reset (SRC display slice) -------------------------------
+/* --- Display-mix reset: DELIBERATELY NOT DONE HERE -----------------------
  * The GC355 sits in the display mix reset domain. EVERY NXP MCUXpresso VGLite
  * example for this board does this before touching the GPU
  * (`BOARD_ResetDisplayMix()` in SimplePath.c, Glyphs.c, RadialGradient.c,
@@ -170,28 +170,28 @@ void vg_lite_hal_barrier(void)
  * buffers complete, but no later submit ever finishes and NOT ONE PIXEL is
  * written -- measured.
  *
- * Registers (RM ch.25): SRC base 0x40C04000; CTRL_DISPLAY at offset 0x224,
- * whose bit 0 SW_RESET is SELF-CLEARING ("once it is set to 1, the reset
- * process will begin, and once it finishes, this bit will be self cleared",
- * RM:121938-121947); STAT_DISPLAY at 0x230, whose read-only bit 0 indicates a
- * reset is in process (RM:122266). */
+ * ★ BUT IT MUST NOT HAPPEN IN THIS DRIVER, and doing it here was a real bug.
+ * The display mix contains the LCDIFv2 and MIPI-DSI as well as the GPU, so
+ * resetting it from vg_lite_hal_initialize() -- which runs AFTER the
+ * application has already brought the panel up -- wipes the panel's
+ * configuration. Measured: the GPU rendered correctly (IRQs tracking submits,
+ * TIMEOUTS=0, framebuffer checksum changing) while the RK055 stayed BLACK,
+ * because nothing was scanning the buffer out any more.
+ *
+ * NXP does it in BOARD init, BEFORE the display is configured, which is the
+ * only correct order. It is a board-level concern, not a GPU-driver one, so
+ * this port does not do it at all; an application that needs it (e.g. because
+ * a debugger left the display mix dirty) must do it before its Display.begin().
+ * Measured separately: it does NOT affect GPU rendering either way.
+ *
+ * Registers, recorded so the knowledge is not lost (RM ch.25): SRC base
+ * 0x40C04000; CTRL_DISPLAY at offset 0x224, bit 0 SW_RESET, SELF-CLEARING
+ * (RM:121938-121947); STAT_DISPLAY at 0x230, read-only bit 0 = reset in
+ * process (RM:122266). */
 #define VGL_SRC_CTRL_DISPLAY        (*(volatile uint32_t *)0x40C04224u)
 #define VGL_SRC_STAT_DISPLAY        (*(volatile uint32_t *)0x40C04230u)
 #define VGL_SRC_SW_RESET            (1u << 0)
 #define VGL_SRC_UNDER_RST           (1u << 0)
-
-static void display_mix_reset(void)
-{
-    VGL_SRC_CTRL_DISPLAY = VGL_SRC_SW_RESET;
-    /* Bounded: a reset that never completes must not hang the board, for the
-     * same reason every wait in this port is bounded. */
-    for (uint32_t spins = 0; spins < 1000000u; spins++) {
-        if ((VGL_SRC_STAT_DISPLAY & VGL_SRC_UNDER_RST) == 0u) {
-            break;
-        }
-    }
-    vg_lite_hal_barrier();
-}
 
 static void gpu2d_clocks_on(void)
 {
@@ -220,7 +220,6 @@ static void gpu2d_clocks_on(void)
  * software-rendered in QEMU, deterministically and without hanging. */
 uint32_t vg_lite_hal_probe_chip_id(void)
 {
-    display_mix_reset();
     gpu2d_clocks_on();
 
     const uint32_t id = vg_lite_hal_peek(VG_LITE_HW_CHIP_ID);
@@ -229,9 +228,6 @@ uint32_t vg_lite_hal_probe_chip_id(void)
 
 vg_lite_error_t vg_lite_hal_initialize(void)
 {
-    /* Order matters and matches the SDK's board init: release the display mix
-     * from reset, THEN clock the GPU. */
-    display_mix_reset();
     gpu2d_clocks_on();
 
     attachInterruptVector((IRQ_NUMBER_t)VGLITE_RT1176_GPU2D_IRQ, vg_lite_IRQHandler);
