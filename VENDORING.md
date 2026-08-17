@@ -6,7 +6,8 @@ checkout at `~/Development/gs-vglite_examples_rt1170`). Vivante VGLite,
 
 ## Licence
 
-**MIT throughout.** Verified before vendoring, 2026-08-16:
+**MIT, with two Apache-2.0 files.** No copyleft. Verified before vendoring,
+2026-08-16:
 
 ```sh
 grep -rl "GNU General Public\|GNU Lesser\|Mozilla Public" . | wc -l   # -> 0
@@ -14,6 +15,35 @@ grep -rl "GNU General Public\|GNU Lesser\|Mozilla Public" . | wc -l   # -> 0
 
 `VGLiteKernel/vg_lite_kernel.h` carries "The MIT License (MIT), Copyright (c)
 2014 - 2020 Vivante Corporation"; `inc/vg_lite.h` the same for 2012 - 2020.
+
+★ **CORRECTION 2026-08-17 — this section said "MIT throughout", and that was
+wrong.** A per-file survey (run when the repo went public, and worth re-running
+on any re-vendor) found **`VGLite/vg_lite_flat.c` and `VGLite/vg_lite_flat.h`
+are Apache-2.0**, not MIT — "Copyright Raph Levien 2022 / Nicolas Silva 2022 /
+NXP 2022". Ten source files are MIT; those two are not; the four
+`port/baremetal/` files are this tree's own and take the repo's MIT terms.
+
+They are **not** dead code that could simply be excluded: `vg_lite.c` includes
+`vg_lite_flat.h` and calls `_flatten_quad_bezier()` / `_flatten_cubic_bezier()`
+from its stroke-conversion path, so they compile and link into firmware.
+Apache-2.0 is permissive and compatible here, so nothing about the vendoring
+decision changes — but the claim did, and a licence claim that is casually
+wrong is worth less than no claim.
+
+★ **Note how this got missed for a day**, because the same blind spot will
+recur: the rt1176-evkb licence audit greps for **copyleft** (GPL/LGPL/MPL), and
+Apache-2.0 is not copyleft. The audit was doing exactly its job and passing
+correctly. "The audit is green" answers *is there copyleft here*, not *is this
+repo the licence its README says it is*. The second question needs a per-file
+survey:
+
+```sh
+for f in $(git ls-files '*.c' '*.h'); do
+  printf '%-46s %s\n' "$f" "$(grep -m1 -o 'MIT License\|Licensed under the Apache License' "$f")"
+done
+```
+
+The full statement, including the Apache-2.0 exception, is in `LICENSE`.
 
 ★ **This is NOT the copy bundled with LVGL.** LVGL's
 `src/libs/vg_lite_driver/` carries a dual-licensed VGLiteKernel that trips
