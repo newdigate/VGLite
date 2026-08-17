@@ -16,14 +16,23 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <Arduino.h>
 #include <core_pins.h>
 
-#include "vg_lite_os.h"
-#include "vg_lite_hal.h"
-#include "vg_lite_kernel.h"
-#include "vg_lite_hw.h"
+/* ★ ORDER IS LOAD-BEARING under HEADER_VERSION 7, and it is the order the
+ * vendored vg_lite_kernel.c itself uses: platform first, then kernel, then hal.
+ * vg_lite_hal.h now declares prototypes in terms of vg_lite_gpu_execute_state_t,
+ * vg_lite_cache_op_t and vg_lite_kernel_*_t, all of which arrive via
+ * vg_lite_platform.h -> vg_lite_type.h. Include hal.h first (as the v6 port
+ * did, when it was harmless) and the errors land INSIDE the vendored header,
+ * which reads like a bad vendor drop rather than a local include-order bug. */
 #include "vg_lite_platform.h"
+#include "vg_lite_kernel.h"
+#include "vg_lite_hal.h"
+#include "vg_lite_hw.h"
+#include "vg_lite_os.h"
 
 /* --- Clocks (HARDWARE-NOTES.md) -----------------------------------------
  * GPU2D consumes gpu2d_aclk, gpu2d_clk2x and gpu2d_hclk; all three share the
@@ -226,7 +235,13 @@ uint32_t vg_lite_hal_probe_chip_id(void)
     return (id == 0xFFFFFFFFu) ? 0u : id;
 }
 
-vg_lite_error_t vg_lite_hal_initialize(void)
+/* HEADER_VERSION 7 made this return void. Nothing is lost: both call sites in
+ * the vendored kernel already discarded the value, and this implementation
+ * always returned VG_LITE_SUCCESS -- clock-gating and NVIC attach have no
+ * failure path to report. Init failures still surface where they can be acted
+ * on: vg_lite_init() checks CHIPID/REVISION/CID/ECOID against the silicon and
+ * returns VG_LITE_NOT_SUPPORT itself. */
+void vg_lite_hal_initialize(void)
 {
     gpu2d_clocks_on();
 
@@ -234,7 +249,6 @@ vg_lite_error_t vg_lite_hal_initialize(void)
     NVIC_ENABLE_IRQ(VGLITE_RT1176_GPU2D_IRQ);
 
     vg_lite_os_initialize();
-    return VG_LITE_SUCCESS;
 }
 
 void vg_lite_hal_deinitialize(void)
@@ -389,6 +403,57 @@ vg_lite_error_t vg_lite_hal_operation_cache(void *handle, vg_lite_cache_op_t cac
 /* dma-buf export is a Linux concept; there is no fd namespace here. Report it
  * unsupported rather than returning SUCCESS with an unset fd -- a caller that
  * believed the success would use a garbage descriptor. */
+/* HEADER_VERSION 7 tracks whether the GPU is considered running. Nothing in
+ * this port acts on it -- completion is driven by the IRQ counter, not by a
+ * cached state flag -- but the kernel calls it, so it must exist. Kept as a
+ * stored value rather than an empty body so it is observable when debugging. */
+static volatile vg_lite_gpu_execute_state_t s_gpu_state = VG_LITE_GPU_STOP;
+
+void vg_lite_set_gpu_execute_state(vg_lite_gpu_execute_state_t state)
+{
+    s_gpu_state = state;
+}
+
+/* vg_lite_kernel_print / _hintmsg are macros onto these two. The driver only
+ * calls them on error paths, and this port has a UART console, so send them
+ * there rather than discarding: a silent driver was exactly what made Phase 1
+ * expensive. */
+void vg_lite_hal_print(char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+}
+
+void vg_lite_hal_trace(char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+}
+
+/* Used by the ONERROR macro to name a status in its diagnostic. Enumerating
+ * every code beats a %d: the whole reason this port keeps the driver's error
+ * output is that Phase 1's failures were silent. */
+const char *vg_lite_hal_Status2Name(vg_lite_error_t status)
+{
+    switch (status) {
+    case VG_LITE_SUCCESS:            return "VG_LITE_SUCCESS";
+    case VG_LITE_INVALID_ARGUMENT:   return "VG_LITE_INVALID_ARGUMENT";
+    case VG_LITE_OUT_OF_MEMORY:      return "VG_LITE_OUT_OF_MEMORY";
+    case VG_LITE_NO_CONTEXT:         return "VG_LITE_NO_CONTEXT";
+    case VG_LITE_TIMEOUT:            return "VG_LITE_TIMEOUT";
+    case VG_LITE_OUT_OF_RESOURCES:   return "VG_LITE_OUT_OF_RESOURCES";
+    case VG_LITE_GENERIC_IO:         return "VG_LITE_GENERIC_IO";
+    case VG_LITE_NOT_SUPPORT:        return "VG_LITE_NOT_SUPPORT";
+    case VG_LITE_ALREADY_EXISTS:     return "VG_LITE_ALREADY_EXISTS";
+    case VG_LITE_NOT_ALIGNED:        return "VG_LITE_NOT_ALIGNED";
+    default:                         return "VG_LITE_UNKNOWN";
+    }
+}
+
 vg_lite_error_t vg_lite_hal_memory_export(int32_t *fd)
 {
     (void)fd;

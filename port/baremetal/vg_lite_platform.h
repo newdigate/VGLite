@@ -29,7 +29,23 @@
  * exist yet. Symptom without it: `unknown type name 'vg_lite_uint32_t'` from
  * deep inside the vendored kernel, which reads like a broken vendor drop
  * rather than a port omission. */
+/* ★ vg_lite.h BEFORE vg_lite_type.h, and both here rather than in the .c.
+ * VGLiteKernel/vg_lite_kernel.h declares vg_lite_cache_op_t,
+ * vg_lite_vidmem_pool_t, vg_lite_kernel_*_t and vg_lite_gpu_execute_state_t in
+ * terms of vg_lite_error_t, but includes only the options headers -- it does
+ * NOT pull in the public header itself. So whoever includes the kernel header
+ * must have vg_lite.h already in scope. Upstream's ports get that from their
+ * own platform header; ours now does the same, which keeps the include order in
+ * every .c identical to the vendored kernel's (platform, kernel, hal, hw). */
+#include "vg_lite.h"
 #include "vg_lite_type.h"
+/* ONERROR, VG_IS_ERROR, vg_lite_kernel_print and vg_lite_kernel_hintmsg are all
+ * MACROS here, not functions -- upstream's rtos/vg_lite_platform.h includes
+ * this same header for exactly that reason. Omit it and the vendored kernel
+ * still compiles (they look like implicit calls) and then fails at LINK time
+ * with "undefined reference to ONERROR", which reads like a missing library
+ * rather than a missing include. */
+#include "vg_lite_debug.h"
 
 #ifdef __cplusplus
 extern "C" {

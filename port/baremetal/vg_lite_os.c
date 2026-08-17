@@ -25,11 +25,15 @@
 #include <stdlib.h>
 #include <Arduino.h>
 
-#include "vg_lite_os.h"
-#include "vg_lite_hal.h"
-#include "vg_lite_kernel.h"
-#include "vg_lite_hw.h"
+/* Same ordering rule as vg_lite_hal.c: platform, kernel, hal, hw. Under
+ * HEADER_VERSION 7 vg_lite_hal.h's prototypes need types that only arrive via
+ * vg_lite_platform.h, so including hal.h first puts the errors inside the
+ * vendored header and hides the fact that the cause is local. */
 #include "vg_lite_platform.h"
+#include "vg_lite_kernel.h"
+#include "vg_lite_hal.h"
+#include "vg_lite_hw.h"
+#include "vg_lite_os.h"
 
 /* Bit 31 of the interrupt status is an AXI bus error. Upstream defines this
  * in its rtos/ file, which this tree does not vendor, so it is restated here
