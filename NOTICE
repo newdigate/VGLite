@@ -1,48 +1,37 @@
 VGLite — third-party notices
 ============================
 
-This repository is MIT (see LICENSE) with ONE exception, recorded here
-rather than inside LICENSE so that automated licence detection still
-identifies the repository correctly. The exception is real and binding;
-this file is where it lives, not a disclaimer about it.
+This repository is **MIT throughout** (see LICENSE). It has no Apache-2.0 files
+and no copyleft.
 
-Apache-2.0 files
-----------------
+★ It did until 2026-08-17. The previous vendored release carried
+`VGLite/vg_lite_flat.{c,h}` under Apache-2.0, and they linked into firmware --
+`vg_lite.c` called their Bezier flatteners from its stroke path. The re-vendor
+to MCUXpresso SDK v26.06.00-LTS (`VGLITE_HEADER_VERSION 7`) does not include
+those files at all, so the exception is gone rather than corrected. This note
+stays because the process that found it is the reusable part, not the finding:
 
-    VGLite/vg_lite_flat.c
-    VGLite/vg_lite_flat.h
+  * A copyleft grep answers "is there GPL/LGPL/MPL here". It does NOT answer
+    "is this repository the licence it advertises". Apache-2.0 is permissive,
+    so the audit passed correctly while the README said "MIT throughout" and
+    was wrong. Only a per-file survey catches that.
 
-are licensed under the Apache License, Version 2.0, and carry their own
-headers:
+  * `VGLite/vg_lite_stroke.c` shipped as ISO-8859-1, and `grep -I` treats a
+    non-UTF-8 file as binary and skips it silently. Measured: `grep -I` found
+    nothing in it, `grep -a` found Vivante's MIT text. It was transcoded to
+    UTF-8 on vendoring, and `VENDORING.md`'s re-vendoring checklist now has an
+    encoding step ahead of the licence survey. A source file the sweep cannot
+    read is worse than one it flags.
 
-    Copyright Raph Levien 2022
-    Copyright Nicolas Silva 2022
-    Copyright NXP 2022
-
-A copy of the Apache License is available at:
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-These two files are NOT optional and NOT dead code. `VGLite/vg_lite.c`
-includes `vg_lite_flat.h` and calls `_flatten_quad_bezier()` and
-`_flatten_cubic_bezier()` from its stroke-conversion path, so they compile
-and link into any firmware built against this driver. If you redistribute
-this software in source or binary form, retain their headers and this
-notice along with LICENSE.
-
-Apache-2.0 is permissive and compatible with the MIT terms in LICENSE for
-this purpose. It is called out because it differs from the rest of the
-tree, and because "MIT throughout" -- which this repository's own README
-said until 2026-08-17 -- was simply not true.
+Both surveys are in `VENDORING.md`. Run them on every re-vendor.
 
 Upstream provenance
 -------------------
 
-The vendored driver comes from NXP's `gs-vglite_examples_rt1170`,
-`common/vglite/` (Vivante VGLite, VGLITE_HEADER_VERSION 6). `VENDORING.md`
-records exactly what was taken, what was left behind, and how the licences
-were verified -- including the per-file survey that found the exception
-above.
+MCUXpresso SDK v26.06.00-LTS, `middleware/vglite/driver` (`mcuxsdk` commit
+a910e7645d2d809a3431e1d5f42fca1cdeee69c9) — the same SDK release the sibling
+LVGL tree is vendored from. `VENDORING.md` records exactly what was taken, what
+was left behind, and how the licences were verified.
 
-`port/baremetal/` is this tree's own work, not vendored, and takes the MIT
-terms in LICENSE.
+`port/baremetal/` is this tree's own work, not vendored, and takes the MIT terms
+in LICENSE.

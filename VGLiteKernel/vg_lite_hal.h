@@ -2,45 +2,38 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright 2012 - 2020 Vivante Corporation, Santa Clara, California.
-*    All Rights Reserved.
+*    Copyright (c) 2014 - 2025 Vivante Corporation
 *
-*    Permission is hereby granted, free of charge, to any person obtaining
-*    a copy of this software and associated documentation files (the
-*    'Software'), to deal in the Software without restriction, including
-*    without limitation the rights to use, copy, modify, merge, publish,
-*    distribute, sub license, and/or sell copies of the Software, and to
-*    permit persons to whom the Software is furnished to do so, subject
-*    to the following conditions:
+*    Permission is hereby granted, free of charge, to any person obtaining a
+*    copy of this software and associated documentation files (the "Software"),
+*    to deal in the Software without restriction, including without limitation
+*    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+*    and/or sell copies of the Software, and to permit persons to whom the
+*    Software is furnished to do so, subject to the following conditions:
 *
-*    The above copyright notice and this permission notice (including the
-*    next paragraph) shall be included in all copies or substantial
-*    portions of the Software.
+*    The above copyright notice and this permission notice shall be included in
+*    all copies or substantial portions of the Software.
 *
-*    THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,
-*    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-*    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
-*    IN NO EVENT SHALL VIVANTE AND/OR ITS SUPPLIERS BE LIABLE FOR ANY
-*    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-*    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-*    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+*    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+*    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+*    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+*    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+*    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+*    DEALINGS IN THE SOFTWARE.
 *
 *****************************************************************************/
 
 #ifndef _vg_lite_hal_h_
 #define _vg_lite_hal_h_
 
-#include "vg_lite_platform.h"
-#include "vg_lite_os.h"
-#include "vg_lite_kernel.h"
+#define VGLITE_MEM_ALIGNMENT      128
 
-#define VGLITE_MEM_ALIGNMENT    128
-#define TASK_LENGTH             8
+#define VGLITE_EVENT_FRAME_END    2  
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 /*!
  @brief Wait a number of milliseconds.
 
@@ -64,7 +57,7 @@ void vg_lite_hal_delay(uint32_t milliseconds);
  The implementer should make sure that on exit of this function the power and clock to the VGLite graphics hardware is
  turned on and stable.
  */
-vg_lite_error_t vg_lite_hal_initialize(void);
+void vg_lite_hal_initialize(void);
 
 /*!
  @brief Uninitialize the hardware.
@@ -89,6 +82,9 @@ void vg_lite_hal_deinitialize(void);
  @param size
  The number of bytes to allocate.
 
+ @param pool
+ select the reserved memory pool
+
  @param logical
  A pointer to a variable that will receive the logical address of the allocated memory for the CPU.
 
@@ -96,10 +92,10 @@ void vg_lite_hal_deinitialize(void);
  A pointer to a variable that will receive the physical address of the allocated memory for the VGLite graphics hardware.
 
  @result
- A pointer to an opaque structure that will be used as the memory handle. <code>NULL</code> should be returned if there is not
+ A pointer to an opaque structure that will be used as the memory handle. NULL should be returned if there is not
  enough memory.
  */
-vg_lite_error_t vg_lite_hal_allocate_contiguous(unsigned long size, void ** logical, uint32_t * physical,void ** node);
+vg_lite_error_t vg_lite_hal_allocate_contiguous(unsigned long size, vg_lite_vidmem_pool_t pool, void **logical, void **klogical, uint32_t *physical, void **node);
 
 /*!
  @brief Free contiguous video memory.
@@ -136,19 +132,19 @@ void vg_lite_hal_free_os_heap(void);
  The number of bytes to map.
 
  @param logical
- The logical address of the memory region to map or <code>NULL</code> if the logical address is not known.
+ The logical address of the memory region to map or NULL if the logical address is not known.
 
  @param physical
- The physical address of the memory region to map if <code>logical</code> is <code>NULL</code>.
+ The physical address of the memory region to map if logical is NULL.
 
  @param gpu
  A pointer to a variable that will receive the VGLite graphics hardware addressable address of the mapped region.
 
  @result
- A pointer to an opaque structure that will be used as the memory handle. <code>NULL</code> should be returned if there is
+ A pointer to an opaque structure that will be used as the memory handle. NULL should be returned if there is
  not enough system resources to map the region.
  */
-void * vg_lite_hal_map(unsigned long size, void * logical, uint32_t physical, uint32_t * gpu);
+void * vg_lite_hal_map(uint32_t flags, uint32_t bytes, void *logical, uint32_t physical, int32_t dma_buf_fd, uint32_t *gpu);
 
 /*!
  @brief Unmap a previously mapped region.
@@ -160,7 +156,7 @@ void * vg_lite_hal_map(unsigned long size, void * logical, uint32_t physical, ui
  @param memory_handle
  A pointer to an opaque structure returned by {@link vg_lite_hal_map}.
  */
-void vg_lite_hal_unmap(void * memory_handle);
+void vg_lite_hal_unmap(void *memory_handle);
 
 /*!
  @brief Execute a memory barrier.
@@ -210,6 +206,25 @@ void vg_lite_hal_poke(uint32_t address, uint32_t data);
 vg_lite_error_t vg_lite_hal_query_mem(vg_lite_kernel_mem_t *mem);
 
 /*!
+ @brief Map contiguous physical memory into the user space.
+
+ @param node
+ This node have 3 attributes, bytes means the number of bytes to map.
+ physical means the physical address of the memory region to map.logical means
+ the return logical address of the memory region after map.
+ */
+vg_lite_error_t vg_lite_hal_map_memory(vg_lite_kernel_map_memory_t *node);
+
+/*!
+ @brief Unmap a previously mapped region.
+
+ @param node
+ This node have 2 attributes, bytes means the number of bytes to unmap.logical means
+ the logical address of the memory region to unmap.
+ */
+vg_lite_error_t vg_lite_hal_unmap_memory(vg_lite_kernel_unmap_memory_t *node);
+
+/*!
  @brief Wait until an interrupt from the VGLite graphics hardware has been received.
 
  @discussion
@@ -221,7 +236,7 @@ vg_lite_error_t vg_lite_hal_query_mem(vg_lite_kernel_mem_t *mem);
  occur. If the interrupt does not occur in the specified timeout, a timeout error will be returned.
 
  @param timeout
- The number of milliseconds to wait for the interrupt before returning a timeout error. If <code>timeout = 0xFFFFFFFF</code>
+ The number of milliseconds to wait for the interrupt before returning a timeout error. If timeout = 0xFFFFFFFF
  then {@link vg_lite_hal_wait_interrupt} will wait forever for the interrupt.
 
  @param mask
@@ -230,41 +245,48 @@ vg_lite_error_t vg_lite_hal_query_mem(vg_lite_kernel_mem_t *mem);
  @result
  A boolean value indicating whether the interrupt was received (1) or not (0).
  */
-int32_t vg_lite_hal_wait_interrupt(uint32_t timeout, uint32_t mask, uint32_t * value);
-
-#if !defined(VG_DRIVER_SINGLE_THREAD)
-/*!
- @brief Submit the current command buffer to the command queue.
-
- @param context
- Address of kernel context.
-
- @param physical
- Current command buffer physical address.
-
- @param offset
- Current command buffer offset.
-
- @param size
- Current command buffer size.
-
- @param event
- The async event to use to track the response for this request.
- */
-vg_lite_error_t vg_lite_hal_submit(uint32_t context,uint32_t physical, uint32_t offset, uint32_t size,  vg_lite_os_async_event_t *event);
+int32_t vg_lite_hal_wait_interrupt(uint32_t timeout, uint32_t mask, uint32_t *value);
 
 /*!
- @brief Wait for the current command buffer to be executed.
-
- @param timeout
- Timeout in milliseconds.
-
- @param event
- The async event to wait for. If the event's signal is 1, the current command
- buffer has been executed.
+ @brief After call vg_lite_hal_map(), flush cpu cache according the direction 
+ spicified by parameter cache_op.
  */
-vg_lite_error_t vg_lite_hal_wait(uint32_t timeout, vg_lite_os_async_event_t *event);
-#endif /* not defined(VG_DRIVER_SINGLE_THREAD) */
+vg_lite_error_t vg_lite_hal_operation_cache(void *handle, vg_lite_cache_op_t cache_op);
+
+/*!
+ @brief export memory to dma buf, and get the dma buf fd 
+ */
+vg_lite_error_t vg_lite_hal_memory_export(int32_t *fd);
+
+/*!
+ @brief print message
+ */
+void vg_lite_hal_print(char *format, ...);
+
+/*!
+ @brief trace message
+ */
+void vg_lite_hal_trace(char *format, ...);
+
+/*!
+ @brief error number to string
+ */
+const char* vg_lite_hal_Status2Name(vg_lite_error_t status);
+
+/*!
+ @brief allocate virtual memory from os
+ */
+vg_lite_error_t vg_lite_hal_allocate(uint32_t size, void **memory);
+
+/*!
+ @brief free virtual memory
+ */
+vg_lite_error_t vg_lite_hal_free(void *memory);
+
+/*!
+ @brief set gpu execute state
+ */
+void vg_lite_set_gpu_execute_state(vg_lite_gpu_execute_state_t state);
 
 #ifdef __cplusplus
 }

@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2020 Vivante Corporation
+*    Copyright (c) 2014 - 2025 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -27,28 +27,29 @@
 #ifndef _vg_lite_hw_h
 #define _vg_lite_hw_h
 
-#define VG_LITE_HW_CLOCK_CONTROL    0x000
-#define VG_LITE_HW_IDLE             0x004
-#define VG_LITE_INTR_STATUS         0x010
-#define VG_LITE_INTR_ENABLE         0x014
-#define VG_LITE_HW_CHIP_ID          0x020
-#define VG_LITE_HW_CMDBUF_ADDRESS   0x500
-#define VG_LITE_HW_CMDBUF_SIZE      0x504
-#define VG_LITE_HW_POWER_CONTROL           0x100
-#define VG_LITE_HW_POWER_MODULE_CONTROL    0x104
+#define VG_LITE_HW_CLOCK_CONTROL     0x000
+#define VG_LITE_HW_IDLE              0x004
+#define VG_LITE_INTR_STATUS          0x010
+#define VG_LITE_INTR_ENABLE          0x014
+#define VG_LITE_HW_CHIP_ID           0x020
+#define VG_LITE_HW_CMDBUF_ADDRESS    0x500
+#define VG_LITE_HW_CMDBUF_SIZE       0x504
+#define VG_LITE_POWER_CONTROL        0x100
+#define VG_LITE_POWER_MODULE_CONTROL 0x104
 
-#define VG_LITE_EXT_WORK_CONTROL    0x520
-#define VG_LITE_EXT_VIDEO_SIZE      0x524
-#define VG_LITE_EXT_CLEAR_VALUE     0x528
+#define VG_LITE_EXT_WORK_CONTROL     0x520
+#define VG_LITE_EXT_VIDEO_SIZE       0x524
+#define VG_LITE_EXT_CLEAR_VALUE      0x528
 
-#define VG_LITE_EXT_VIDEO_CONTROL   0x51C
+#define VG_LITE_EXT_VIDEO_CONTROL    0x51C
 
 typedef struct clock_control {
     uint32_t reserved0 : 1;
     uint32_t clock_gate : 1;
     uint32_t scale : 7;
     uint32_t scale_load : 1;
-    uint32_t reserved10 : 2;
+    uint32_t ram_clock_gating : 1;
+    uint32_t debug_registers : 1;
     uint32_t soft_reset : 1;
     uint32_t reserved13 : 6;
     uint32_t isolate : 1;

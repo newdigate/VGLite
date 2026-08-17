@@ -2,7 +2,7 @@
 *
 *    The MIT License (MIT)
 *
-*    Copyright (c) 2014 - 2020 Vivante Corporation
+*    Copyright (c) 2014 - 2025 Vivante Corporation
 *
 *    Permission is hereby granted, free of charge, to any person obtaining a
 *    copy of this software and associated documentation files (the "Software"),
@@ -27,7 +27,12 @@
 #ifndef _vg_lite_kernel_h_
 #define _vg_lite_kernel_h_
 
-#include "vg_lite_os.h"
+#include "../VGLite/vg_lite_options.h"
+#include "vg_lite_option.h"
+
+#if gcdVG_ENABLE_COMMAND_BUFFER_CACHE
+#define CACHE_COMMAND_BUFFER_SIZE            1 << 20 
+#endif
 
 /* Interrupt IDs from GPU. */
 #define EVENT_UNEXPECTED_MESH  0x80000000
@@ -36,36 +41,46 @@
 #define EVENT_CMD_SWITCH       0x10000000
 #define EVENT_MCU_BAD_WRITE    0x08000000
 #define EVENT_END              0
+#define EVENT_FRAME_END        1
 
-#define MAX_CONTIGUOUS_SIZE 0x02000000
+/* MAX_CONTIGUOUS_SIZE may be overwritten in some environment. Add #ifndef to avoid the warning  */
+#ifndef MAX_CONTIGUOUS_SIZE
+#define MAX_CONTIGUOUS_SIZE 0x04000000
+#endif
 
-#define VG_LITE_INFINITE       0xFFFFFFFF
-#define VG_LITE_MAX_WAIT_TIME  0x130000
+#define VG_LITE_INFINITE    0xFFFFFFFF
+
+#if gcFEATURE_VG_SINGLE_COMMAND_BUFFER
+#define CMDBUF_COUNT        1
+#else
 #define CMDBUF_COUNT        2
+#endif
 
 #define VG_LITE_ALIGN(number, alignment)    \
         (((number) + ((alignment) - 1)) & ~((alignment) - 1))
 
-/* Available function optimization levels */
-#if (defined(__ICCARM__))
-#define VG_LITE_ATTR_OPTIMIZE_LOW               _Pragma("optimize=none")
-#define VG_LITE_ATTR_OPTIMIZE_MEDIUM            _Pragma("optimize=medium")
-#define VG_LITE_ATTR_OPTIMIZE_HIGH              _Pragma("optimize=high")
-#else /* ARMGCC */
-#define VG_LITE_ATTR_OPTIMIZE_LOW               __attribute__((optimize(1)))
-#define VG_LITE_ATTR_OPTIMIZE_MEDIUM            __attribute__((optimize(2)))
-#define VG_LITE_ATTR_OPTIMIZE_HIGH              __attribute__((optimize(3)))
-#endif /* defined(__ICCARM__) */
-
-/* Allow develpers to force a function optimization level */
-#define VG_LITE_OPTIMIZE(level)                 VG_LITE_ATTR_OPTIMIZE_##level
+#ifndef BIT
+#define  BIT(x)                 (1 << x)
+#endif
 
 #define VG_LITE_KERNEL_IS_GPU_IDLE() \
 ((vg_lite_hal_peek(VG_LITE_HW_IDLE) & VG_LITE_HW_IDLE_STATE) == VG_LITE_HW_IDLE_STATE)
 
 /* Hardware chip Ids */
-#define GPU_CHIP_ID_GCNanoliteV         0x255
+#define GPU_CHIP_ID_GCNANOLITEV         0x255
 #define GPU_CHIP_ID_GC355               0x355
+#define GPU_CHIP_ID_GCNANOULTRAV        0x265
+
+/* vg_lite_kernel_map_t flag type */
+#define VG_LITE_HAL_MAP_DMABUF          0x00000004
+#define VG_LITE_HAL_MAP_USER_MEMORY     0x00000008
+#define VG_LITE_HAL_ALLOC_4G            0x00000010
+
+/* vg_lite_kernel_allocate_t flag type */
+#define VG_LITE_RESERVED_ALLOCATOR      0x10000000
+#define VG_LITE_GFP_ALLOCATOR           0x20000000
+#define VG_LITE_DMA_ALLOCATOR           0x40000000
+#define VG_LITE_MEMORY_ALLOCATOR_FLAG   0x70000000
 
 #ifdef __cplusplus
 extern "C" {
@@ -77,35 +92,27 @@ extern "C" {
     @abstract Error codes that the vg_lite functions can return.
 
     @discussion
-    All API functions return a status code. On success, <code>VG_LITE_SUCCESS</code> will be returned when a function is
-    successful. This value is set to zero, so if any function returns a non-zero value, an error has occured.
+    All API functions return a status code. On success, VG_LITE_SUCCESS will be returned when a function is
+    successful. This value is set to zero, so if any function returns a non-zero value, an error has occurred.
     */
 typedef enum vg_lite_error
 {
-    VG_LITE_SUCCESS = 0,        /*! Success. */
-    VG_LITE_INVALID_ARGUMENT,   /*! An invalid argument was specified. */
-    VG_LITE_OUT_OF_MEMORY,      /*! Out of memory. */
-    VG_LITE_NO_CONTEXT,         /*! No context or an unintialized context specified. */
-    VG_LITE_TIMEOUT,            /*! A timeout has occured during a wait. */
-    VG_LITE_OUT_OF_RESOURCES,   /*! Out of system resources. */
-    VG_LITE_GENERIC_IO,         /*! Cannot communicate with the kernel driver. */
-    VG_LITE_NOT_SUPPORT,        /*! Function call not supported. */
-    VG_LITE_MULTI_THREAD_FAIL,  /*! Multi-thread/tasks fail. */
-    VG_LITE_ALREADY_EXISTS,     /*! Object already exists */
-    VG_LITE_NOT_ALIGNED,        /*! Data alignment error */
+    VG_LITE_SUCCESS = 0,          /*! Success.                                         */
+    VG_LITE_INVALID_ARGUMENT,     /*! An invalid argument was specified.               */
+    VG_LITE_OUT_OF_MEMORY,        /*! Out of GPU memory                                */
+    VG_LITE_NO_CONTEXT,           /*! No context or an unintialized context specified. */
+    VG_LITE_TIMEOUT,              /*! A timeout has occurred during a wait.            */
+    VG_LITE_OUT_OF_RESOURCES,     /*! Out of system resources.                         */
+    VG_LITE_GENERIC_IO,           /*! Cannot communicate with the kernel driver.       */
+    VG_LITE_NOT_SUPPORT,          /*! Function call not supported.                     */
+    VG_LITE_ALREADY_EXISTS,       /*! Object already exists                            */
+    VG_LITE_NOT_ALIGNED,          /*! Data alignment error                             */
+    VG_LITE_FLEXA_TIME_OUT,       /*! VG timeout requesting for segment buffer         */
+    VG_LITE_FLEXA_HANDSHAKE_FAIL, /*! VG and SBI synchronizer handshake failed         */
+    VG_LITE_SYSTEM_CALL_FAIL,     /*! kernel api call fail                             */
 }
 vg_lite_error_t;
 #endif
-
-#if !defined(VG_DRIVER_SINGLE_THREAD)
-typedef enum vg_lite_buffer_signal
-{
-    VG_LITE_IDLE = 0,        /*! Buffer available. */
-    VG_LITE_HW_FINISHED,     /*! HW has completed command buffer. */
-    VG_LITE_IN_QUEUE,        /*! Buffer has been send to queue. */
-}
-vg_lite_buffer_signal_t;
-#endif /* not defined(VG_DRIVER_SINGLE_THREAD) */
 
 typedef enum vg_lite_kernel_counter
 {
@@ -161,46 +168,103 @@ typedef enum vg_lite_kernel_command
     /* Query mem. */
     VG_LITE_QUERY_MEM,
 
-#if !defined(VG_DRIVER_SINGLE_THREAD)
-    /* Mutex lock. */
-    VG_LITE_LOCK,
+    /* Flexa disable */
+    VG_LITE_FLEXA_DISABLE,
 
-    /* Mutex unlock. */
-    VG_LITE_UNLOCK,
+    /* Flexa enable */
+    VG_LITE_FLEXA_ENABLE,
 
-    /* query context switch. */
-    VG_LITE_QUERY_CONTEXT_SWITCH,
-#endif /* not defined(VG_DRIVER_SINGLE_THREAD) */
+    /* Flexa stop frame */
+    VG_LITE_FLEXA_STOP_FRAME,
 
+    /* Set background address */
+    VG_LITE_FLEXA_SET_BACKGROUND_ADDRESS,
+
+    /* Map memory to user */
+    VG_LITE_MAP_MEMORY,
+
+    /* Unmap memory to user */
+    VG_LITE_UNMAP_MEMORY,
+
+    /* Close gpu */
+    VG_LITE_CLOSE,
+
+    /* Operation cache */
+    VG_LITE_CACHE,
+
+    /* Export memory */
+    VG_LITE_EXPORT_MEMORY,
+
+    /* Record GPU hardware running time */
+    VG_LITE_RECORD_RUNNING_TIME,
+
+    /* Set delay resume state */
+    VG_LITE_SET_DELAY_RESUME,
+
+    /* Query delay resume state */
+    VG_LITE_QUERY_DELAY_RESUME,
+
+    /* Set GPU clock state */
+    VG_LITE_SET_GPU_CLOCK_STATE,
+
+    /* Excute command backed up by user */
+    VG_LITE_EXECUTE_BACKUP_COMMAND,
 }
 vg_lite_kernel_command_t;
 
-struct vg_lite_kernel_context {
-    /* Command buffer. */
-    void      * command_buffer[CMDBUF_COUNT];
-    void      * command_buffer_logical[CMDBUF_COUNT];
-    uint32_t    command_buffer_physical[CMDBUF_COUNT];
+typedef enum vg_lite_cache_op {
+    VG_LITE_CACHE_CLEAN,
+    VG_LITE_CACHE_INVALIDATE,
+    VG_LITE_CACHE_FLUSH,
+} 
+vg_lite_cache_op_t;
 
-#if !defined(VG_DRIVER_SINGLE_THREAD)
-    vg_lite_os_async_event_t async_event[CMDBUF_COUNT];
-#endif /* not defined(VG_DRIVER_SINGLE_THREAD) */
+typedef enum vg_lite_vidmem_pool {
+    VG_LITE_POOL_RESERVED_MEMORY1 = 0,
+    VG_LITE_POOL_RESERVED_MEMORY2 = 1,
+}
+vg_lite_vidmem_pool_t;
 
-    /* Tessellation buffer. */
-    void      * tessellation_buffer;
-    void      * tessellation_buffer_logical;
-    uint32_t    tessellation_buffer_physical;
-
-#if !defined(VG_DRIVER_SINGLE_THREAD)
-    /* context buffer. */
-    void      * context_buffer[CMDBUF_COUNT];
-    void      * context_buffer_logical[CMDBUF_COUNT];
-    uint32_t    context_buffer_physical[CMDBUF_COUNT];
-#endif /* not defined(VG_DRIVER_SINGLE_THREAD) */
-
-};
+typedef enum vg_lite_gpu_execute_state {
+    VG_LITE_GPU_STOP = 0,
+    VG_LITE_GPU_RUN  = 1,
+}
+vg_lite_gpu_execute_state_t;
 
 /* Context structure. */
-typedef struct vg_lite_kernel_context vg_lite_kernel_context_t;
+typedef struct vg_lite_kernel_context {
+    /* Command buffer. */
+    void                     *command_buffer[CMDBUF_COUNT];
+    void                     *command_buffer_logical[CMDBUF_COUNT];
+    void                     *command_buffer_klogical[CMDBUF_COUNT];
+    uint32_t                  command_buffer_physical[CMDBUF_COUNT];
+    uint32_t                  end_of_frame;
+    
+    /* Tessellation buffer. */
+    void                     *tess_buffer;
+    void                     *tessbuf_logical;
+    void                     *tessbuf_klogical;
+    uint32_t                  tessbuf_physical;
+
+    /* power context buffer  */
+    void                     *power_context;
+    void                     *power_context_logical;
+    void                     *power_context_klogical;
+    uint32_t                  power_context_physical;
+    uint32_t                  power_context_size;
+    uint32_t                  power_context_capacity;
+}
+vg_lite_kernel_context_t;
+
+typedef struct frame_buffer_command {
+    void                     *handle;
+    void                     *command_buffer_logical;
+    void                     *command_buffer_klogical;
+    uint32_t                  command_buffer_physical;
+    uint32_t                  command_buffer_size;
+    uint32_t                  offset;
+}
+frame_buffer_command_t;
 
 typedef struct capabilities
 {
@@ -208,7 +272,7 @@ typedef struct capabilities
     uint32_t l2_cache : 1;
 }
 capabilities_t;
-
+    
 typedef union vg_lite_capabilities
 {
     capabilities_t cap;
@@ -218,19 +282,22 @@ vg_lite_capabilities_t;
 
 typedef struct vg_lite_kernel_initialize
 {
+    /* INPUT */
+
     /* Command buffer size. */
     uint32_t command_buffer_size;
 
-#if !defined(VG_DRIVER_SINGLE_THREAD)
-    /* Context buffer size. */
-    uint32_t context_buffer_size;
-#endif /* not defined(VG_DRIVER_SINGLE_THREAD) */
-
     /* Tessellation buffer width. */
-    int32_t tessellation_width;
+    int32_t tess_width;
 
     /* Tessellation buffer height. */
-    int32_t tessellation_height;
+    int32_t tess_height;
+
+    /* Memory pool for command buffer. */
+    vg_lite_vidmem_pool_t command_buffer_pool;
+
+    /* Memory pool for tessellation buffer. */
+    vg_lite_vidmem_pool_t tess_buffer_pool;
 
     /* OUTPUT */
 
@@ -245,32 +312,30 @@ typedef struct vg_lite_kernel_initialize
 
     /* GPU address for command buffer. */
     uint32_t command_buffer_gpu[CMDBUF_COUNT];
-
-#if !defined(VG_DRIVER_SINGLE_THREAD)
-    /* Allocated context buffer. */
-    void * context_buffer[CMDBUF_COUNT];
-
-    /* GPU address for context buffer. */
-    uint32_t context_buffer_gpu[CMDBUF_COUNT];
-#endif /* not defined(VG_DRIVER_SINGLE_THREAD) */
-
+    
     /* GPU addresses for tesselation buffers. */
-    uint32_t tessellation_buffer_gpu[3];
-
+    uint32_t physical_addr;
+    
     /* Logic addresses for tessellation buffers: used by SW Tessellator. */
-    uint8_t *tessellation_buffer_logic[3];
-
+    uint8_t *logical_addr;
+    
     /* Size of each level of the tesselation buffer. */
-    uint32_t tessellation_buffer_size[3];
+    uint32_t tessbuf_size;
 
-    /* Stride of the tessellation buffer. */
-    uint32_t tessellation_stride;
+    /* Size of each level of the vg count buffer. */
+    uint32_t countbuf_size;
 
     /* Width and height of tessellation buffer. */
-    uint32_t tessellation_width_height;
+    uint32_t tess_w_h;
 
-    /* Tessellation config: shift. */
-    uint32_t tessellation_shift;
+    /* Logical address of fb command buffer. */
+    void* fb_command_buffer;
+
+    /* Fb command buffer size. */
+    uint32_t fb_command_buffer_size;
+
+    /* GPU address of fb command buffer. */
+    uint32_t fb_command_buffer_gpu;
 }
 vg_lite_kernel_initialize_t;
 
@@ -283,11 +348,19 @@ vg_lite_kernel_terminate_t;
 
 typedef struct vg_lite_kernel_allocate
 {
+    /* INPUT */
+
     /* Number of bytes to allocate. */
     uint32_t bytes;
 
     /* Flag to indicate whether the allocated memory is contiguous or not. */
     int32_t contiguous;
+
+    /* Flag to indicate where to allocate memory  */
+    uint32_t flags;
+
+    /* select reserved memory pool */
+    vg_lite_vidmem_pool_t pool;
 
     /* OUTPUT */
 
@@ -296,6 +369,9 @@ typedef struct vg_lite_kernel_allocate
 
     /* Allocated memory. */
     void * memory;
+
+    /* kernel memory */
+    void * kmemory;
 
     /* GPU address of allocated memory. */
     uint32_t memory_gpu;
@@ -325,6 +401,15 @@ typedef struct vg_lite_kernel_submit
 }
 vg_lite_kernel_submit_t;
 
+typedef enum vg_lite_gpu_reset_type
+{
+    RESTORE_INIT_COMMAND = 0,
+    RESTORE_LAST_COMMAND = 1,
+    RESTORE_ALL_COMMAND  = 2,
+    RESTORE_NONE         = 3,
+}
+vg_lite_gpu_reset_type_t;
+
 typedef struct vg_lite_kernel_wait
 {
     /* Context to wait for. */
@@ -332,17 +417,15 @@ typedef struct vg_lite_kernel_wait
 
     /* Timeout in milliseconds. */
     uint32_t timeout_ms;
-
-#if defined(VG_DRIVER_SINGLE_THREAD)
+    
     /* The event to wait. */
     uint32_t event_mask;
 
     /* The event(s) got after waiting. */
     uint32_t event_got;
-#else
-    /* Command Buffer ID. */
-    uint32_t command_id;
-#endif /* VG_DRIVER_SINGLE_THREAD */
+
+    /* After GPU reset, select submit command */
+    vg_lite_gpu_reset_type_t reset_type;
 }
 vg_lite_kernel_wait_t;
 
@@ -350,6 +433,7 @@ typedef struct vg_lite_kernel_reset
 {
     /* Context to reset. */
     vg_lite_kernel_context_t * context;
+    uint32_t delay_resume_flag;
 }
 vg_lite_kernel_reset_t;
 
@@ -385,6 +469,10 @@ vg_lite_kernel_debug_t;
 
 typedef struct vg_lite_kernel_map
 {
+    /* INPUT */  
+    uint32_t flags;
+
+    /* user memory */
     /* Number of bytes to map. */
     uint32_t bytes;
 
@@ -394,8 +482,11 @@ typedef struct vg_lite_kernel_map
     /* Physical memory address or 0. */
     uint32_t physical;
 
-    /* OUTPUT */
+    /* dma_buf */
+    /* dma_buf fd */
+    int32_t dma_buf_fd;
 
+    /* OUTPUT */
     /* Memory handle for mapped memory. */
     void * memory_handle;
 
@@ -411,6 +502,15 @@ typedef struct vg_lite_kernel_unmap
 }
 vg_lite_kernel_unmap_t;
 
+typedef struct vg_lite_kernel_cache
+{
+    vg_lite_cache_op_t cache_op;    
+
+    /* Memory handle to operation. */
+    void * memory_handle;
+}
+vg_lite_kernel_cache_t;
+
 typedef struct vg_lite_kernel_info
 {
     /* Register's address. */
@@ -421,24 +521,100 @@ typedef struct vg_lite_kernel_info
 }
 vg_lite_kernel_info_t;
 
+typedef struct vg_lite_kernel_flexa_info
+{
+    uint32_t                    sbi_mode;
+    uint32_t                    sync_mode;
+    uint32_t                    flexa_mode;
+    uint32_t                    stream_id;
+    uint32_t                    segment_address;
+    uint32_t                    segment_count;
+    uint32_t                    segment_size;
+    uint32_t                    stop_flag;
+    uint32_t                    start_flag;
+    uint32_t                    reset_flag;
+}
+vg_lite_kernel_flexa_info_t;
+
 typedef struct vg_lite_kernel_mem
 {
     uint32_t bytes;
+
+    vg_lite_vidmem_pool_t pool;
 }
 vg_lite_kernel_mem_t;
 
-#if !defined(VG_DRIVER_SINGLE_THREAD)
-typedef struct vg_lite_kernel_context_switch
+typedef struct vg_lite_kernel_cmdcache
 {
-    uint8_t isContextSwitched;
-    uint32_t context;
+    uint32_t physical;
+    uint32_t size;
 }
-vg_lite_kernel_context_switch_t;
-#endif /* not defined(VG_DRIVER_SINGLE_THREAD) */
+vg_lite_kernel_cmdcache_t;
+
+typedef struct vg_lite_kernel_map_memory
+{
+    /* Number of bytes to map. */
+    uint32_t bytes;
+
+    /* Physical memory address. */
+    uint32_t physical;
+
+    /* Logical memory address. */
+    void * logical;
+}
+vg_lite_kernel_map_memory_t;
+
+typedef struct vg_lite_kernel_unmap_memory
+{
+    /* Number of bytes to map. */
+    uint32_t bytes;
+
+    /* Logical memory address. */
+    void * logical;
+}
+vg_lite_kernel_unmap_memory_t;
+
+typedef struct vg_lite_kernel_close
+{
+    vg_lite_kernel_context_t * context;
+}
+vg_lite_kernel_close_t;
+
+typedef struct vg_lite_kernel_export_memory
+{
+    int32_t fd;
+}
+vg_lite_kernel_export_memory_t;
+
+typedef struct vg_lite_kernel_hardware_running_time
+{
+    unsigned long run_time;
+    int32_t hertz;
+}
+vg_lite_kernel_hardware_running_time_t;
+
+typedef struct vg_lite_kernel_delay_resume
+{
+    uint32_t set_delay_resume;
+    uint32_t query_delay_resume;
+}
+vg_lite_kernel_delay_resume_t;
+
+typedef struct vg_lite_kernel_gpu_clock_state
+{
+    uint32_t state;
+}
+vg_lite_kernel_gpu_clock_state_t;
 
 vg_lite_error_t vg_lite_kernel(vg_lite_kernel_command_t command, void * data);
 
-#ifdef  __cplusplus
+vg_lite_error_t record_running_time(void);
+
+extern uint32_t init_buffer[12];
+extern uint32_t is_init;
+extern size_t physical_address;
+
+#ifdef __cplusplus
 }
 #endif
 #endif /* _vg_lite_kernel_h_ */
