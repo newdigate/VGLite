@@ -22,6 +22,14 @@
  * inc/vg_lite_hal.h:33, so supplying NULL here fixes it without patching
  * vendored code. Remove this and the kernel fails with "'NULL' undeclared". */
 #include <stddef.h>
+/* HEADER_VERSION 7: vg_lite_kernel.c includes this platform header FIRST and
+ * then uses vg_lite_uint32_t &c., so the type header has to arrive here.
+ * Upstream's rtos/vg_lite_platform.h does exactly the same (../vg_lite_type.h);
+ * our HEADER_VERSION 6 copy never needed it because those typedefs did not
+ * exist yet. Symptom without it: `unknown type name 'vg_lite_uint32_t'` from
+ * deep inside the vendored kernel, which reads like a broken vendor drop
+ * rather than a port omission. */
+#include "vg_lite_type.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -246,10 +246,22 @@ void vg_lite_hal_deinitialize(void)
     vg_lite_hal_barrier();
 }
 
-vg_lite_error_t vg_lite_hal_allocate_contiguous(unsigned long size, void **logical,
+/* HEADER_VERSION 7 added `pool` and `klogical`.
+ *
+ * pool selects among several video-memory heaps upstream; this port has ONE
+ * flat contiguous pool, so it is clamped and ignored -- NXP's own FreeRTOS port
+ * clamps out-of-range pools the same way rather than indexing blind.
+ *
+ * klogical is the kernel-side logical address. There is one address space here
+ * and no MMU, so it equals the user logical address by construction. */
+vg_lite_error_t vg_lite_hal_allocate_contiguous(unsigned long size,
+                                                vg_lite_vidmem_pool_t pool,
+                                                void **logical, void **klogical,
                                                 uint32_t *physical, void **node)
 {
     const uint32_t want = VGL_ALIGN_UP((uint32_t)size);
+
+    (void)pool;   /* single flat pool -- see above */
 
     for (vgl_node_t *n = s_head; n != NULL; n = n->next) {
         if (n->used || n->size < want) {
@@ -269,6 +281,7 @@ vg_lite_error_t vg_lite_hal_allocate_contiguous(unsigned long size, void **logic
 
         uint8_t *payload = (uint8_t *)n + sizeof(vgl_node_t);
         if (logical)  *logical  = payload;
+        if (klogical) *klogical = payload;   /* one address space, no MMU */
         if (physical) *physical = (uint32_t)(uintptr_t)payload + s_gpu_mem_base;
         if (node)     *node     = n;
         return VG_LITE_SUCCESS;
@@ -312,9 +325,16 @@ void vg_lite_hal_free_os_heap(void)
  * Translation is genuinely identity (no MMU in this path), so the handle only
  * has to be a distinct non-NULL token that unmap can accept. The logical
  * address serves: it is unique per mapping and needs no bookkeeping. */
-void *vg_lite_hal_map(unsigned long size, void *logical, uint32_t physical, uint32_t *gpu)
+/* HEADER_VERSION 7 replaced `size` with `bytes` and added `flags` and
+ * `dma_buf_fd`. NXP's own port (VGLiteKernel/rtos/vg_lite_hal.c) casts all
+ * three to void and ignores them; there is no dma-buf and no mapping mode to
+ * honour on bare metal, so this does the same rather than inventing meaning. */
+void *vg_lite_hal_map(uint32_t flags, uint32_t bytes, void *logical,
+                      uint32_t physical, int32_t dma_buf_fd, uint32_t *gpu)
 {
-    (void)size;
+    (void)flags;
+    (void)bytes;
+    (void)dma_buf_fd;
 
     if (gpu) {
         *gpu = physical + s_gpu_mem_base;
@@ -328,6 +348,51 @@ void vg_lite_hal_unmap(void *memory_handle)
 {
     /* Nothing was allocated to describe the mapping, so nothing to release. */
     (void)memory_handle;
+}
+
+/* --- HEADER_VERSION 7 kernel-command handlers -------------------------------
+ * Four entry points the newer kernel dispatches for VG_LITE_MAP_MEMORY,
+ * UNMAP_MEMORY, CACHE and EXPORT_MEMORY. NXP's own port implements each in
+ * 4-7 lines; on this part they are simpler still, and the reasons are worth
+ * stating because each one is a place where copying another port's code would
+ * be actively wrong. */
+
+/* Memory is already CPU-visible: physical and logical coincide (identity, no
+ * MMU), so mapping is just handing the address back. */
+vg_lite_error_t vg_lite_hal_map_memory(vg_lite_kernel_map_memory_t *node)
+{
+    if (node == NULL) {
+        return VG_LITE_INVALID_ARGUMENT;
+    }
+    node->logical = (void *)(uintptr_t)node->physical;
+    return VG_LITE_SUCCESS;
+}
+
+vg_lite_error_t vg_lite_hal_unmap_memory(vg_lite_kernel_unmap_memory_t *node)
+{
+    (void)node;   /* nothing was mapped -- see above */
+    return VG_LITE_SUCCESS;
+}
+
+/* ★ No cache maintenance, and this is a deliberate per-core fact rather than an
+ * omission. The imxrt1176 core never writes SCB_CCR, so the D-cache is OFF and
+ * CPU and GPU views of memory agree for free. Do NOT port the rt1062 handling
+ * here: that core DOES enable the D-cache, and a buffer coherent on one board
+ * is not on the other. See the consuming tree's CLAUDE.md. */
+vg_lite_error_t vg_lite_hal_operation_cache(void *handle, vg_lite_cache_op_t cache_op)
+{
+    (void)handle;
+    (void)cache_op;
+    return VG_LITE_SUCCESS;
+}
+
+/* dma-buf export is a Linux concept; there is no fd namespace here. Report it
+ * unsupported rather than returning SUCCESS with an unset fd -- a caller that
+ * believed the success would use a garbage descriptor. */
+vg_lite_error_t vg_lite_hal_memory_export(int32_t *fd)
+{
+    (void)fd;
+    return VG_LITE_NOT_SUPPORT;
 }
 
 uint32_t vg_lite_hal_peek(uint32_t address)
