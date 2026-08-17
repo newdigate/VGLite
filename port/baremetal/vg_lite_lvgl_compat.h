@@ -85,6 +85,61 @@
 #define gcFEATURE_BIT_VG_YUV_TILED_INPUT           VGL_COMPAT_FEATURE(36)
 #define gcFEATURE_BIT_VG_YUY2_INPUT                VGL_COMPAT_FEATURE(37)
 
+/* --- error + format names LVGL 9.4 names and this driver does not ----------
+ * Generated: tools/vglite-lvgl-names.py | grep '^VG_LITE_'
+ *
+ * Values sit far above every real enumerator (formats reach 100, errors 11),
+ * so none can alias one. Unlike the feature bits above, these are NOT all
+ * inert -- see the hazard note below.
+ */
+#define VGL_COMPAT_ENUM(n) (0x7000 + (n))
+
+/* Stringify-only in LVGL: they appear solely in lv_vg_lite_error_string() /
+ * the format stringifier, so a never-produced value is correct and inert. */
+#define VG_LITE_ABGR8565                VGL_COMPAT_ENUM(0)
+#define VG_LITE_ARGB8565                VGL_COMPAT_ENUM(1)
+#define VG_LITE_RGB888                  VGL_COMPAT_ENUM(2)
+#define VG_LITE_RGBA5658                VGL_COMPAT_ENUM(3)
+#define VG_LITE_FLEXA_TIME_OUT          VGL_COMPAT_ENUM(4)
+#define VG_LITE_FLEXA_HANDSHAKE_FAIL    VGL_COMPAT_ENUM(5)
+
+/* Compared, never produced: lv_vg_lite_utils.c:728 tests
+ *     if (tiled || format == VG_LITE_RGBA8888_ETC2_EAC)
+ * and nothing in this configuration yields it, so a unique value makes that
+ * test permanently false -- which is the correct answer. */
+#define VG_LITE_RGBA8888_ETC2_EAC       VGL_COMPAT_ENUM(6)
+
+/* ★★ THESE TWO ARE NOT INERT. Read before touching.
+ *
+ * LVGL RETURNS them as the format a buffer will actually be drawn with:
+ *     case LV_COLOR_FORMAT_ARGB8565: return VG_LITE_BGRA5658;   utils.c:582
+ *     case LV_COLOR_FORMAT_RGB888:   return VG_LITE_BGR888;     utils.c:585
+ * so if an image in either LVGL colour format reaches this backend, the value
+ * below is handed to the GPU as a real format.
+ *
+ * This driver HANGS on input it cannot parse rather than reporting an error --
+ * Phase 1 spent most of its time on a misaligned command buffer that stopped
+ * the front end while every API call returned VG_LITE_SUCCESS. So the failure
+ * mode here is SILENCE, not a wrong colour, and it would look like a hardware
+ * fault rather than a shim defect.
+ *
+ * Safe today only because nothing produces those colour formats: every image
+ * decoder is off in LVGL/port/lv_conf.h (LODEPNG, BMP, TJPGD,
+ * BIN_DECODER_RAM_LOAD all 0). Enabling one makes this shim unsafe, and the
+ * answer then is to re-vendor a driver that HAS the formats -- never to map
+ * them onto something that "looks close". Silently drawing ARGB8565 as
+ * BGRA8888 is the plausible-but-wrong behaviour this tree's gates exist to
+ * catch.
+ *
+ * ★ The guard for that is enforced at CONFIGURE time by import_evkb_lvgl(),
+ * NOT here. This header is force-included with -include, i.e. before the
+ * translation unit's own #includes, so lv_conf.h has not been read yet and an
+ * `#if LV_USE_LODEPNG` in this file would test an undefined macro and never
+ * fire. A guard that cannot fire is worse than none: it reads as protection.
+ */
+#define VG_LITE_BGR888                  VGL_COMPAT_ENUM(7)
+#define VG_LITE_BGRA5658                VGL_COMPAT_ENUM(8)
+
 /* --- the alias check, not a comment ---------------------------------------
  * If any shimmed value fell below gcFEATURE_COUNT it would index the real
  * feature table and return another feature's answer. Assert instead of trust.
