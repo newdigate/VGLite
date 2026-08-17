@@ -43,7 +43,10 @@ for f in $(git ls-files '*.c' '*.h'); do
 done
 ```
 
-The full statement, including the Apache-2.0 exception, is in `LICENSE`.
+The full statement lives in `NOTICE`; `LICENSE` is kept as plain MIT so
+automated licence detection still identifies the repo (an exception block
+inside it reads as a modified licence and detection drops to NOASSERTION --
+measured, not guessed).
 
 ★ **This is NOT the copy bundled with LVGL.** LVGL's
 `src/libs/vg_lite_driver/` carries a dual-licensed VGLiteKernel that trips

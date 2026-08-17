@@ -4,9 +4,9 @@ Vivante VGLite vector-GPU driver for the i.MX RT1176's **GC355** (GPU2D at
 `0x4180_0000`, IRQ 60, `GPU2D_CLK_ROOT`), vendored from NXP and ported to bare
 metal for the rt1176-evkb tree.
 
-MIT, except `VGLite/vg_lite_flat.{c,h}` which are Apache-2.0 (both permissive,
-no copyleft anywhere). See `LICENSE` for the exact statement and `VENDORING.md`
-for provenance and how the licence was verified.
+MIT (`LICENSE`), except `VGLite/vg_lite_flat.{c,h}` which are Apache-2.0 — see
+`NOTICE`. Both permissive; no copyleft anywhere. `VENDORING.md` records
+provenance and how the licences were verified.
 
 ## Layout
 
