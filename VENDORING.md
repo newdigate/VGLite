@@ -114,3 +114,8 @@ It is Xilinx FPGA bring-up scaffolding, not a Cortex-M port. Do not enable it.
    `VGLiteKernel/vg_lite_kernel.c` for changed `vg_lite_os_*` / `vg_lite_hal_*`
    signatures — the port implements those contracts and drift is a link error
    at best, a hang at worst.
+5. **Re-run the per-file licence survey above** and reconcile `NOTICE` with what
+   it prints. Step 3's greps only prove *no copyleft*; they say nothing about a
+   file arriving under a third permissive licence, which is exactly how the
+   Apache-2.0 pair went unnoticed. A new licence found here is not necessarily a
+   problem — it is a `NOTICE` entry that must be written before the push.
