@@ -140,6 +140,30 @@ int32_t vg_lite_os_wait_interrupt(uint32_t timeout, uint32_t mask, uint32_t *val
         const uint32_t flags = s_int_flags;
 
         if (flags & mask) {
+            /* ★ FLAG ALONE IS NOT COMPLETION. The ISR OR-accumulates, so a
+             * late or extra interrupt from an earlier submission leaves a
+             * flag a later wait would consume instantly -- and a frame the
+             * driver split across several submissions then "finishes" while
+             * the GPU is still executing. Found 2026-08-28 by the rotary
+             * widget's delta equality guard: once the gpu-well work grew the
+             * per-frame command stream, EVERY frame's checksum varied per
+             * boot (ten boots, ten grid sums), rk_gpu_err=0 throughout.
+             * So on top of the flag, require the front end to actually be
+             * IDLE (AQHiIdle bit 0 -- the Phase-1 bring-up diagnostic).
+             * Sound for this port's synchronous single-context model, where
+             * every wait means "the queued work is done"; a future
+             * overlapped-submission design must revisit this together with
+             * the whole flag scheme. */
+            if ((vg_lite_hal_peek(VG_LITE_HW_IDLE) & 0x1u) == 0u) {
+                if ((millis() - t0) >= limit) {
+                    s_wait_timeouts++;
+                    if (value != NULL) {
+                        *value = 0;
+                    }
+                    return 0;
+                }
+                continue;               /* signalled but still executing */
+            }
             if (value != NULL) {
                 *value = flags & mask;
                 if (IS_AXI_BUS_ERR(*value)) {
