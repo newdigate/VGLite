@@ -36,3 +36,10 @@ cache handling here.
 
 Status: bare-metal port + GPU-alive probe (`display/vglite_probe` in the evkb
 tree). LVGL draw-unit integration is Phase 2.
+
+## Behaviour on the RT1176's GC355
+
+This driver's API reports success for several things this silicon does not do.
+`rt1176-evkb`'s `docs/gc355-vglite-quirks.md` is the reference — one row per
+feature, each citing the `display/vglite_conformance` probe case that
+establishes it.
