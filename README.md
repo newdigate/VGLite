@@ -4,9 +4,12 @@ Vivante VGLite vector-GPU driver for the i.MX RT1176's **GC355** (GPU2D at
 `0x4180_0000`, IRQ 60, `GPU2D_CLK_ROOT`), vendored from NXP and ported to bare
 metal for the rt1176-evkb tree.
 
-MIT (`LICENSE`), except `VGLite/vg_lite_flat.{c,h}` which are Apache-2.0 — see
-`NOTICE`. Both permissive; no copyleft anywhere. `VENDORING.md` records
-provenance and how the licences were verified.
+MIT throughout (`LICENSE`); no copyleft anywhere. The Apache-2.0 exception this
+file used to name, `VGLite/vg_lite_flat.{c,h}`, is gone — the SDK v26.06.00-LTS
+re-vendor (`VGLITE_HEADER_VERSION 7`) does not ship those files at all.
+`NOTICE` records that history and why a copyleft grep would not have caught it;
+`VENDORING.md` records provenance and carries the per-file survey to re-run on
+every re-vendor.
 
 ## Layout
 
@@ -34,8 +37,24 @@ Cache maintenance is deliberately absent: the `imxrt1176` core never enables
 the D-cache, so CPU and GPU views of memory agree. Do not port the rt1062
 cache handling here.
 
-Status: bare-metal port + GPU-alive probe (`display/vglite_probe` in the evkb
-tree). LVGL draw-unit integration is Phase 2.
+## Status
+
+The port is done and the GC355 renders on silicon. Four consumers in the evkb
+tree, in the order they were built:
+
+- `display/vglite_probe` — the GPU-alive probe.
+- `display/vglite_lvgl_test` — LVGL's `LV_USE_DRAW_VG_LITE` backend. It renders
+  **correctly** but **not faster**: 2.45 fps against software's 2.83 on the same
+  scene, CPU-bound in the backend's per-task path construction rather than in
+  the GPU. Kept as the integration proof, not as the fast path.
+- `SynthUI`'s rotary-knob and fader compositors — **direct `vg_lite` calls**
+  behind a chip-ID probe, with cached paths and damage-bounded scissors. Both
+  meet a 30 fps budget where the LVGL backend does not: the knob at 32.1 fps
+  vsync-locked (~42 unfenced), the fader at 30.4. The reason is the point — the
+  win came from not rebuilding paths per frame, which the LVGL draw unit cannot
+  avoid.
+- `display/vglite_conformance` — the conformance matrix behind the quirks
+  reference below.
 
 ## Behaviour on the RT1176's GC355
 
